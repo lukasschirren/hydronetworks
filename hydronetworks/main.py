@@ -12,7 +12,7 @@ import geopandas as gpd
 from pyproj import CRS
 from pyproj.proj import Proj
 
-from .streamorder import shreve, strahler
+from .streamorder import shreve, strahler, shreve_iterative
 from .runoff import rainfall_runoff, discharge
 
 wgs84 = CRS("EPSG:4326")
@@ -62,14 +62,23 @@ class HydroNetworks:
 
         for index, row in self.rivers.iterrows():
             # the geometry variables (int so that they actual match when comparing)
-            fx = int(row.geometry[0].xy[0][0])
-            fy = int(row.geometry[0].xy[1][0])
-            lx = int(row.geometry[0].xy[0][-1])
-            ly = int(row.geometry[0].xy[1][-1])
+            if isinstance(row.geometry, list):
+                # Access the first and last coordinates
+                first_point = row.geometry[0]
+                last_point = row.geometry[-1]
+
+                # Convert coordinates to integers
+                fx = int(first_point[0])
+                fy = int(first_point[1])
+                lx = int(last_point[0])
+                ly = int(last_point[1])
+
+                # Calculate arc_length
+                arc_length = int(sum((last_point[i] - first_point[i])**2 for i in range(2))**0.5)
 
             # add arc_length as a determinant of how much water contributes downstream
             # not sure if it's a good idea going forward...
-            arc_length = int(row.geometry.length)
+            #arc_length = int(row.geometry.length)
 
             # store the index as a column for easier access
             # the last column is for stream order
@@ -126,6 +135,20 @@ class HydroNetworks:
                         self.network[sink][7] = strahler(
                             sink, self.network[sink][5], self.network, self.nodes
                         )
+                        
+                        
+    def assign_streamorder_iterative(self, method="strahler"):
+        for node in self.nodes:
+            sink = self.network[node[4]][0]
+            if method == "shreve":
+                self.network[sink][7] = shreve_iterative(
+                    sink, self.network, self.nodes
+                )
+            else:
+                self.network[sink][7] = strahler(
+                    sink, self.network[sink][5], self.network, self.nodes
+                )
+
 
     def load_attributes(self):
         for node in self.nodes:
